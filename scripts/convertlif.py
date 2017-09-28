@@ -6,24 +6,14 @@ import argparse
 import tempfile
 import subprocess
 
-from contextlib import contextmanager
+from dtoolcore import DataSet, ProtoDataSet
 
-from dbluesea import AzureDataSet
-
-
-@contextmanager
-def tmp_working_dir(prefix):
-
-    tmp_dir = tempfile.mkdtemp(prefix=prefix)
-
-    yield tmp_dir
-
-    shutil.rmtree(tmp_dir)
+from dtoolutils import temp_working_dir, stage_outputs
 
 
 def convert_lif_file(dataset, identifier, output_directory):
 
-    lif_file_path = dataset.abspath_from_identifier(identifier)
+    lif_file_path = dataset.item_content_abspath(identifier)
     output_file_template = os.path.join('/output', '%n.tif')
 
     container = "jicscicomp/bioformats"
@@ -40,21 +30,11 @@ def convert_lif_file(dataset, identifier, output_directory):
     returncode = subprocess.call(docker_command)
     print("Returned {}".format(returncode))
 
+    output_file_list = os.listdir(output_directory)
 
-def put_all_in_dir_to_dataset(dir, dataset, prefix=None):
+    outputs = [(filename, {}) for filename in output_file_list]
 
-    for filename in os.listdir(dir):
-
-        if prefix is not None:
-            remote_path = "{}/{}".format(prefix, filename)
-        else:
-            remote_path = "{}".format(filename)
-
-        local_path = os.path.join(dir, filename)
-
-        print("Put {} as {}".format(local_path, remote_path))
-
-        dataset.put_from_local_path(local_path, remote_path)
+    return outputs
 
 
 def main():
@@ -77,17 +57,26 @@ def main():
 
     args = parser.parse_args()
 
-    input_dataset = AzureDataSet.from_uuid(args.dataset)
+    input_dataset = DataSet.from_uri(args.dataset)
 
-    output_dataset = AzureDataSet.from_uuid(args.output_dataset)
+    output_dataset = ProtoDataSet.from_uri(args.output_dataset)
+
 
     tmpdir_prefix = os.path.join(os.path.expanduser("~"), 'tmp', 'tmp')
 
-    with tmp_working_dir(tmpdir_prefix) as working_dir:
-        convert_lif_file(input_dataset, args.identifier, working_dir)
-        item_path = input_dataset.item_from_identifier(args.identifier)['path']
-        name_stem, _ = os.path.splitext(item_path)
-        put_all_in_dir_to_dataset(working_dir, output_dataset, name_stem)
+    with temp_working_dir() as working_dir:
+        outputs = convert_lif_file(input_dataset, args.identifier, working_dir)
+        stage_outputs(
+            outputs,
+            working_dir,
+            input_dataset,
+            output_dataset,
+            [],
+            args.identifier
+        )
+    #     item_path = input_dataset.item_from_identifier(args.identifier)['path']
+    #     name_stem, _ = os.path.splitext(item_path)
+    #     put_all_in_dir_to_dataset(working_dir, output_dataset, name_stem)
 
 if __name__ == '__main__':
     main()
