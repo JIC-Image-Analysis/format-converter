@@ -32,6 +32,7 @@ def stage_outputs(
         src_abspath = os.path.join(working_dir, filename)
         useful_name = dataset.get_overlay('useful_name')[identifier]
         relpath = os.path.join(useful_name, filename)
+        print("Push {} as {}.".format(src_abspath, relpath))
         output_dataset.put_item(src_abspath, relpath)
 
         # Add 'from' overlay
